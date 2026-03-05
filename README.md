@@ -1,51 +1,22 @@
 tortr
 
-universal linux package installer
+tortr is a cross distro package installer written in C++
 
-tortr installs software using the system package manager and if that fails it tries other package systems
-
-goal
-
-install packages across linux distributions with one command
+it detects the system package manager and installs packages using it
 
 supported package managers
 
-pacman  arch linux and arch based distros
-apt  debian ubuntu
-dnf  fedora
-zypper  opensuse
-xbps  void linux
+pacman
+apt
+dnf
+zypper
+xbps
+nix
 
-fallback package systems
+fallback sources
 
 flatpak
 snap
-
-usage
-
-install package
-
-tortr install <package>
-
-remove package
-
-tortr remove <package>
-
-search package
-
-tortr search <package>
-
-update system
-
-tortr update
-
-show version
-
-tortr version
-
-help
-
-tortr help
 
 example
 
@@ -53,22 +24,28 @@ tortr install firefox
 tortr search neovim
 tortr update
 
-installation
+how it works
 
-compile
+tortr checks which package manager exists on the system
+when installing a package it uses the native package manager first
+if the package is not found it tries fallback sources
 
-g++ tortr.cpp -o tortr
+building
 
-optional install system wide
+requires g++
 
-./tortr setup
+clone the repository and run
 
-tested on
+make
 
-arch linux
-ubuntu
+this will build the tortr binary
 
-author
+install
 
-torter
-koubbamohamedrayan
+move the binary somewhere in your path for example
+
+sudo mv tortr /usr/local/bin
+
+license
+
+GPL
