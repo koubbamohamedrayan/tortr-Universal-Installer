@@ -1,137 +1,210 @@
 #include <iostream>
-#include <cstdlib>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <vector>
 #include <string>
 
-using namespace std;
-
-bool exists(string cmd) {
-    string check = "which " + cmd + " > /dev/null 2>&1";
-    return system(check.c_str()) == 0;
+bool exists(const std::string& cmd)
+{
+    std::string path = "/usr/bin/" + cmd;
+    return access(path.c_str(), X_OK) == 0;
 }
 
-int main(int argc, char* argv[]) {
+int run(std::vector<std::string> args)
+{
+    pid_t pid = fork();
 
-    if (argc < 2) {
-        cout << "tortr - universal linux package installer\n";
-        cout << "usage:\n";
-        cout << " tortr install <package>\n";
-        cout << " tortr search <package>\n";
-        cout << " tortr update\n";
-        cout << " tortr setup\n";
-        cout << " tortr help\n";
-        return 0;
+    if (pid == 0)
+    {
+        std::vector<char*> cargs;
+        for (auto& a : args)
+            cargs.push_back(const_cast<char*>(a.c_str()));
+
+        cargs.push_back(nullptr);
+
+        execvp(cargs[0], cargs.data());
+        exit(1);
     }
 
-    string command = argv[1];
+    int status;
+    waitpid(pid, &status, 0);
+    return status;
+}
 
-    if (command == "help") {
-        cout << "tortr commands:\n";
-        cout << " install <package>\n";
-        cout << " search <package>\n";
-        cout << " update\n";
-        cout << " setup\n";
-        return 0;
+std::string detect_manager()
+{
+    if (exists("pacman")) return "pacman";
+    if (exists("apt")) return "apt";
+    if (exists("dnf")) return "dnf";
+    if (exists("zypper")) return "zypper";
+    return "unknown";
+}
+
+int try_native(const std::string& manager, const std::string& pkg)
+{
+    std::cout << "[1] trying native repo\n";
+
+    if (manager == "pacman")
+        return run({"sudo","pacman","-S","--needed",pkg});
+
+    if (manager == "apt")
+        return run({"sudo","apt","install","-y",pkg});
+
+    if (manager == "dnf")
+        return run({"sudo","dnf","install","-y",pkg});
+
+    if (manager == "zypper")
+        return run({"sudo","zypper","install",pkg});
+
+    return 1;
+}
+
+int try_flatpak(const std::string& pkg)
+{
+    if (!exists("flatpak")) return 1;
+
+    std::cout << "[2] trying flatpak\n";
+    return run({"flatpak","install","flathub",pkg});
+}
+
+int try_snap(const std::string& pkg)
+{
+    if (!exists("snap")) return 1;
+
+    std::cout << "[3] trying snap\n";
+    return run({"sudo","snap","install",pkg});
+}
+
+int try_aur(const std::string& pkg)
+{
+    if (!exists("git") || !exists("makepkg")) return 1;
+
+    std::cout << "[4] trying AUR\n";
+
+    run({"git","clone","https://aur.archlinux.org/" + pkg + ".git"});
+    run({"bash","-c","cd " + pkg + " && makepkg -si"});
+
+    return 0;
+}
+
+void install(const std::string& manager, const std::string& pkg)
+{
+    if (try_native(manager, pkg) == 0)
+    {
+        std::cout << "installed from native repo\n";
+        return;
     }
 
-    if (command == "setup") {
-        cout << "Installing tortr to /usr/local/bin...\n";
-        system("sudo cp tortr /usr/local/bin/tortr");
-        cout << "Done.\n";
-        return 0;
+    if (try_flatpak(pkg) == 0)
+    {
+        std::cout << "installed via flatpak\n";
+        return;
     }
 
-    string manager;
-
-    if (exists("pacman")) manager = "pacman";
-    else if (exists("apt")) manager = "apt";
-    else if (exists("dnf")) manager = "dnf";
-    else if (exists("zypper")) manager = "zypper";
-    else manager = "unknown";
-
-    cout << "Detected package manager: " << manager << "\n";
-
-    if (command == "install") {
-
-        if (argc < 3) {
-            cout << "package required\n";
-            return 1;
-        }
-
-        string package = argv[2];
-        int result = 1;
-
-        if (manager == "pacman")
-            result = system(("sudo pacman -S --needed " + package).c_str());
-
-        else if (manager == "apt")
-            result = system(("sudo apt install -y " + package).c_str());
-
-        else if (manager == "dnf")
-            result = system(("sudo dnf install -y " + package).c_str());
-
-        else if (manager == "zypper")
-            result = system(("sudo zypper install " + package).c_str());
-
-        if (result != 0) {
-
-            if (exists("flatpak")) {
-                cout << "Trying flatpak...\n";
-                system(("flatpak install flathub " + package).c_str());
-            }
-
-            else if (exists("snap")) {
-                cout << "Trying snap...\n";
-                system(("sudo snap install " + package).c_str());
-            }
-        }
+    if (try_snap(pkg) == 0)
+    {
+        std::cout << "installed via snap\n";
+        return;
     }
 
-    else if (command == "search") {
-
-        if (argc < 3) {
-            cout << "package required\n";
-            return 1;
-        }
-
-        string package = argv[2];
-
-        if (manager == "pacman")
-            system(("pacman -Ss " + package).c_str());
-
-        else if (manager == "apt")
-            system(("apt search " + package).c_str());
-
-        else if (manager == "dnf")
-            system(("dnf search " + package).c_str());
-
-        else if (manager == "zypper")
-            system(("zypper search " + package).c_str());
+    if (manager == "pacman")
+    {
+        try_aur(pkg);
+        return;
     }
 
-    else if (command == "update") {
+    std::cout << "package not found anywhere\n";
+}
 
-        if (manager == "pacman")
-            system("sudo pacman -Syu");
+void search(const std::string& manager, const std::string& pkg)
+{
+    std::cout << "native repo results\n";
 
-        else if (manager == "apt")
-            system("sudo apt update && sudo apt upgrade -y");
+    if (manager == "pacman")
+        run({"pacman","-Ss",pkg});
 
-        else if (manager == "dnf")
-            system("sudo dnf upgrade -y");
+    else if (manager == "apt")
+        run({"apt","search",pkg});
 
-        else if (manager == "zypper")
-            system("sudo zypper update");
+    else if (manager == "dnf")
+        run({"dnf","search",pkg});
 
-        if (exists("flatpak"))
-            system("flatpak update");
+    else if (manager == "zypper")
+        run({"zypper","search",pkg});
 
-        if (exists("snap"))
-            system("sudo snap refresh");
+    if (exists("flatpak"))
+    {
+        std::cout << "\nflatpak\n";
+        run({"flatpak","search",pkg});
     }
 
-    else {
-        cout << "unknown command\n";
+    if (exists("snap"))
+    {
+        std::cout << "\nsnap\n";
+        run({"snap","find",pkg});
     }
+}
+
+void update(const std::string& manager)
+{
+    std::cout << "updating system\n";
+
+    if (manager == "pacman")
+        run({"sudo","pacman","-Syu"});
+
+    else if (manager == "apt")
+    {
+        run({"sudo","apt","update"});
+        run({"sudo","apt","upgrade","-y"});
+    }
+
+    else if (manager == "dnf")
+        run({"sudo","dnf","upgrade","-y"});
+
+    else if (manager == "zypper")
+        run({"sudo","zypper","update"});
+
+    if (exists("flatpak"))
+        run({"flatpak","update"});
+
+    if (exists("snap"))
+        run({"sudo","snap","refresh"});
+}
+
+void help()
+{
+    std::cout << "tortr universal package installer\n\n";
+    std::cout << "commands\n";
+    std::cout << " install <package>\n";
+    std::cout << " search <package>\n";
+    std::cout << " update\n";
+    std::cout << " help\n";
+}
+
+int main(int argc, char* argv[])
+{
+    if (argc < 2)
+    {
+        help();
+        return 1;
+    }
+
+    std::string command = argv[1];
+    std::string manager = detect_manager();
+
+    std::cout << "detected package manager: " << manager << "\n";
+
+    if (command == "install" && argc > 2)
+        install(manager, argv[2]);
+
+    else if (command == "search" && argc > 2)
+        search(manager, argv[2]);
+
+    else if (command == "update")
+        update(manager);
+
+    else
+        help();
 
     return 0;
 }
