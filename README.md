@@ -1,47 +1,74 @@
 tortr
 
-tortr is a small program that installs packages on Linux systems.
+universal linux package installer
 
-It detects the system package manager and runs it automatically.
-If the package is not found, it can try Flatpak or Snap.
+tortr installs software using the system package manager and if that fails it tries other package systems
 
-Supported managers:
+goal
 
-- pacman
-- apt
-- dnf
-- zypper
+install packages across linux distributions with one command
 
-Build
+supported package managers
 
-Compile with:
+pacman  arch linux and arch based distros
+apt  debian ubuntu
+dnf  fedora
+zypper  opensuse
+xbps  void linux
 
-g++ tortr.cpp -o tortr
+fallback package systems
 
-Install
+flatpak
+snap
 
-./tortr setup
+usage
 
-This installs tortr to "/usr/local/bin".
-
-Usage
-
-Install a package:
+install package
 
 tortr install <package>
 
-Search for a package:
+remove package
+
+tortr remove <package>
+
+search package
 
 tortr search <package>
 
-Update system packages:
+update system
 
 tortr update
 
-Show help:
+show version
+
+tortr version
+
+help
 
 tortr help
 
-License
+example
 
-GPL
+tortr install firefox
+tortr search neovim
+tortr update
+
+installation
+
+compile
+
+g++ tortr.cpp -o tortr
+
+optional install system wide
+
+./tortr setup
+
+tested on
+
+arch linux
+ubuntu
+
+author
+
+torter
+koubbamohamedrayan
